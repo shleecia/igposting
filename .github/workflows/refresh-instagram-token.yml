@@ -1,0 +1,32 @@
+name: Refresh Instagram token
+
+on:
+  schedule:
+    - cron: "0 9 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  refresh:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Refresh token and update secret
+        env:
+          IG_ACCESS_TOKEN: ${{ secrets.IG_ACCESS_TOKEN }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+        run: |
+          set -euo pipefail
+          resp=$(curl -sS -G "https://graph.instagram.com/refresh_access_token" \
+            --data-urlencode "grant_type=ig_refresh_token" \
+            --data-urlencode "access_token=${IG_ACCESS_TOKEN}")
+          new=$(echo "$resp" | jq -r '.access_token // empty')
+          if [ -z "$new" ]; then
+            echo "Token refresh failed: $resp"
+            exit 1
+          fi
+          echo "::add-mask::$new"
+          gh secret set IG_ACCESS_TOKEN --repo "$GITHUB_REPOSITORY" --body "$new"
+          echo "Token refreshed."
